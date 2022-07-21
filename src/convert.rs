@@ -993,7 +993,7 @@ impl From<TransactionError> for tx_by_addr::TransactionError {
                 }
                 TransactionError::DuplicateInstruction(i) => {
                     Some(tx_by_addr::InstructionError {
-                        index: i as u32, custom: None, error: tx_by_addr::InstructionErrorType::Custom as i32
+                        index: i as u32, custom: None, error: tx_by_addr::InstructionErrorType::GenericError as i32
                     })
                 }
                 _ => None,
@@ -1061,6 +1061,8 @@ impl TryFrom<tx_by_addr::TransactionByAddr> for Vec<TransactionByAddrInfo> {
 
 #[cfg(test)]
 mod test {
+    use solana_sdk::bs58;
+
     use {super::*, enum_iterator::IntoEnumIterator};
 
     #[test]
@@ -1260,7 +1262,7 @@ mod test {
             tx_by_addr_transaction_error.try_into().unwrap()
         );
 
-        let transaction_error = TransactionError::DuplicateInstruction(0);
+        let transaction_error = TransactionError::DuplicateInstruction(123);
         let tx_by_addr_transaction_error: tx_by_addr::TransactionError =
             transaction_error.clone().into();
         assert_eq!(
@@ -1688,7 +1690,10 @@ mod test {
         let ix_index = 1;
         let custom_error = 42;
         for error in tx_by_addr::TransactionErrorType::into_enum_iter() {
-            if error != tx_by_addr::TransactionErrorType::InstructionError {
+            if error == tx_by_addr::TransactionErrorType::DuplicateInstruction ||
+               error == tx_by_addr::TransactionErrorType::InsufficientFundsForRent {
+                continue
+            } else if error != tx_by_addr::TransactionErrorType::InstructionError {
                 let tx_by_addr_error = tx_by_addr::TransactionError {
                     transaction_error: error as i32,
                     instruction_error: None,
