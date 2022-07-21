@@ -671,6 +671,17 @@ impl TryFrom<tx_by_addr::TransactionError> for TransactionError {
                     ie,
                 ));
             }
+        } else if transaction_error.transaction_error == 30 || transaction_error.transaction_error == 31 {
+            if let Some(instruction) = transaction_error.instruction_error {
+                let index = instruction.index as u8;
+                if transaction_error.transaction_error == 30 {
+                    return Ok(TransactionError::DuplicateInstruction(index))
+                } else {
+                    return Ok(TransactionError::InsufficientFundsForRent { account_index: index })
+                }
+            } else {
+                return Err("InstructionError data missing for transaction error")
+            }
         }
 
         Ok(match transaction_error.transaction_error {
@@ -703,8 +714,6 @@ impl TryFrom<tx_by_addr::TransactionError> for TransactionError {
             27 => TransactionError::InvalidRentPayingAccount,
             28 => TransactionError::WouldExceedMaxVoteCostLimit,
             29 => TransactionError::WouldExceedAccountDataTotalLimit,
-            30 => TransactionError::DuplicateInstruction(0),
-            31 => TransactionError::InsufficientFundsForRent { account_index: 0 },
             _ => return Err("Invalid TransactionError"),
         })
     }
@@ -975,6 +984,16 @@ impl From<TransactionError> for tx_by_addr::TransactionError {
                             }
                             _ => None,
                         },
+                    })
+                }
+                TransactionError::InsufficientFundsForRent { account_index } => {
+                    Some(tx_by_addr::InstructionError {
+                        index: account_index as u32, custom: None, error: tx_by_addr::InstructionErrorType::InsufficientFunds as i32
+                    })
+                }
+                TransactionError::DuplicateInstruction(i) => {
+                    Some(tx_by_addr::InstructionError {
+                        index: i as u32, custom: None, error: tx_by_addr::InstructionErrorType::Custom as i32
                     })
                 }
                 _ => None,
