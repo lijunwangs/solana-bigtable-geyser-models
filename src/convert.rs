@@ -524,6 +524,7 @@ impl From<TransactionTokenBalance> for generated::TokenBalance {
                 ui_amount_string: value.ui_token_amount.ui_amount_string,
             }),
             owner: value.owner,
+            program_id: value.program_id,
         }
     }
 }
@@ -552,6 +553,7 @@ impl From<generated::TokenBalance> for TransactionTokenBalance {
                 },
             },
             owner: value.owner,
+            program_id: value.program_id,
         }
     }
 }
@@ -701,6 +703,8 @@ impl TryFrom<tx_by_addr::TransactionError> for TransactionError {
             27 => TransactionError::InvalidRentPayingAccount,
             28 => TransactionError::WouldExceedMaxVoteCostLimit,
             29 => TransactionError::WouldExceedAccountDataTotalLimit,
+            30 => TransactionError::DuplicateInstruction(0),
+            31 => TransactionError::InsufficientFundsForRent { account_index: 0 },
             _ => return Err("Invalid TransactionError"),
         })
     }
@@ -797,6 +801,12 @@ impl From<TransactionError> for tx_by_addr::TransactionError {
                 }
                 TransactionError::WouldExceedAccountDataTotalLimit => {
                     tx_by_addr::TransactionErrorType::WouldExceedAccountDataTotalLimit
+                }
+                TransactionError::InsufficientFundsForRent {..} => {
+                    tx_by_addr::TransactionErrorType::InsufficientFundsForRent
+                }
+                TransactionError::DuplicateInstruction(_) => {
+                    tx_by_addr::TransactionErrorType::DuplicateInstruction
                 }
             } as i32,
             instruction_error: match transaction_error {
@@ -1224,6 +1234,22 @@ mod test {
         );
 
         let transaction_error = TransactionError::WouldExceedMaxAccountCostLimit;
+        let tx_by_addr_transaction_error: tx_by_addr::TransactionError =
+            transaction_error.clone().into();
+        assert_eq!(
+            transaction_error,
+            tx_by_addr_transaction_error.try_into().unwrap()
+        );
+
+        let transaction_error = TransactionError::DuplicateInstruction(0);
+        let tx_by_addr_transaction_error: tx_by_addr::TransactionError =
+            transaction_error.clone().into();
+        assert_eq!(
+            transaction_error,
+            tx_by_addr_transaction_error.try_into().unwrap()
+        );
+
+        let transaction_error = TransactionError::InsufficientFundsForRent { account_index: 0 };
         let tx_by_addr_transaction_error: tx_by_addr::TransactionError =
             transaction_error.clone().into();
         assert_eq!(
