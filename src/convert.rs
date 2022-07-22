@@ -671,16 +671,20 @@ impl TryFrom<tx_by_addr::TransactionError> for TransactionError {
                     ie,
                 ));
             }
-        } else if transaction_error.transaction_error == 30 || transaction_error.transaction_error == 31 {
+        } else if transaction_error.transaction_error == 30
+            || transaction_error.transaction_error == 31
+        {
             if let Some(instruction) = transaction_error.instruction_error {
                 let index = instruction.index as u8;
                 if transaction_error.transaction_error == 30 {
-                    return Ok(TransactionError::DuplicateInstruction(index))
+                    return Ok(TransactionError::DuplicateInstruction(index));
                 } else {
-                    return Ok(TransactionError::InsufficientFundsForRent { account_index: index })
+                    return Ok(TransactionError::InsufficientFundsForRent {
+                        account_index: index,
+                    });
                 }
             } else {
-                return Err("InstructionError data missing for transaction error")
+                return Err("InstructionError data missing for transaction error");
             }
         }
 
@@ -811,7 +815,7 @@ impl From<TransactionError> for tx_by_addr::TransactionError {
                 TransactionError::WouldExceedAccountDataTotalLimit => {
                     tx_by_addr::TransactionErrorType::WouldExceedAccountDataTotalLimit
                 }
-                TransactionError::InsufficientFundsForRent {..} => {
+                TransactionError::InsufficientFundsForRent { .. } => {
                     tx_by_addr::TransactionErrorType::InsufficientFundsForRent
                 }
                 TransactionError::DuplicateInstruction(_) => {
@@ -988,14 +992,16 @@ impl From<TransactionError> for tx_by_addr::TransactionError {
                 }
                 TransactionError::InsufficientFundsForRent { account_index } => {
                     Some(tx_by_addr::InstructionError {
-                        index: account_index as u32, custom: None, error: tx_by_addr::InstructionErrorType::InsufficientFunds as i32
+                        index: account_index as u32,
+                        custom: None,
+                        error: tx_by_addr::InstructionErrorType::InsufficientFunds as i32,
                     })
                 }
-                TransactionError::DuplicateInstruction(i) => {
-                    Some(tx_by_addr::InstructionError {
-                        index: i as u32, custom: None, error: tx_by_addr::InstructionErrorType::GenericError as i32
-                    })
-                }
+                TransactionError::DuplicateInstruction(i) => Some(tx_by_addr::InstructionError {
+                    index: i as u32,
+                    custom: None,
+                    error: tx_by_addr::InstructionErrorType::GenericError as i32,
+                }),
                 _ => None,
             },
         }
@@ -1690,9 +1696,10 @@ mod test {
         let ix_index = 1;
         let custom_error = 42;
         for error in tx_by_addr::TransactionErrorType::into_enum_iter() {
-            if error == tx_by_addr::TransactionErrorType::DuplicateInstruction ||
-               error == tx_by_addr::TransactionErrorType::InsufficientFundsForRent {
-                continue
+            if error == tx_by_addr::TransactionErrorType::DuplicateInstruction
+                || error == tx_by_addr::TransactionErrorType::InsufficientFundsForRent
+            {
+                continue;
             } else if error != tx_by_addr::TransactionErrorType::InstructionError {
                 let tx_by_addr_error = tx_by_addr::TransactionError {
                     transaction_error: error as i32,
