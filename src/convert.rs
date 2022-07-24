@@ -671,20 +671,21 @@ impl TryFrom<tx_by_addr::TransactionError> for TransactionError {
                     ie,
                 ));
             }
-        } else if transaction_error.transaction_error == 30
-            || transaction_error.transaction_error == 31
-        {
-            if let Some(instruction) = transaction_error.instruction_error {
-                let index = instruction.index as u8;
-                if transaction_error.transaction_error == 30 {
-                    return Ok(TransactionError::DuplicateInstruction(index));
-                } else {
+        }
+
+        if let Some(transaction_details) = transaction_error.transaction_details {
+            match transaction_error.transaction_error {
+                30 => {
+                    return Ok(TransactionError::DuplicateInstruction(
+                        transaction_details.index as u8,
+                    ));
+                }
+                31 => {
                     return Ok(TransactionError::InsufficientFundsForRent {
-                        account_index: index,
+                        account_index: transaction_details.index as u8,
                     });
                 }
-            } else {
-                return Err("InstructionError data missing for transaction error");
+                _ => {}
             }
         }
 
@@ -815,11 +816,11 @@ impl From<TransactionError> for tx_by_addr::TransactionError {
                 TransactionError::WouldExceedAccountDataTotalLimit => {
                     tx_by_addr::TransactionErrorType::WouldExceedAccountDataTotalLimit
                 }
-                TransactionError::InsufficientFundsForRent { .. } => {
-                    tx_by_addr::TransactionErrorType::InsufficientFundsForRent
-                }
                 TransactionError::DuplicateInstruction(_) => {
                     tx_by_addr::TransactionErrorType::DuplicateInstruction
+                }
+                TransactionError::InsufficientFundsForRent { .. } => {
+                    tx_by_addr::TransactionErrorType::InsufficientFundsForRent
                 }
             } as i32,
             instruction_error: match transaction_error {
@@ -990,18 +991,19 @@ impl From<TransactionError> for tx_by_addr::TransactionError {
                         },
                     })
                 }
-                TransactionError::InsufficientFundsForRent { account_index } => {
-                    Some(tx_by_addr::InstructionError {
-                        index: account_index as u32,
-                        custom: None,
-                        error: tx_by_addr::InstructionErrorType::InsufficientFunds as i32,
+                _ => None,
+            },
+            transaction_details: match transaction_error {
+                TransactionError::DuplicateInstruction(index) => {
+                    Some(tx_by_addr::TransactionDetails {
+                        index: index as u32,
                     })
                 }
-                TransactionError::DuplicateInstruction(i) => Some(tx_by_addr::InstructionError {
-                    index: i as u32,
-                    custom: None,
-                    error: tx_by_addr::InstructionErrorType::GenericError as i32,
-                }),
+                TransactionError::InsufficientFundsForRent { account_index } => {
+                    Some(tx_by_addr::TransactionDetails {
+                        index: account_index as u32,
+                    })
+                }
                 _ => None,
             },
         }
@@ -1261,22 +1263,6 @@ mod test {
         );
 
         let transaction_error = TransactionError::WouldExceedMaxAccountCostLimit;
-        let tx_by_addr_transaction_error: tx_by_addr::TransactionError =
-            transaction_error.clone().into();
-        assert_eq!(
-            transaction_error,
-            tx_by_addr_transaction_error.try_into().unwrap()
-        );
-
-        let transaction_error = TransactionError::DuplicateInstruction(123);
-        let tx_by_addr_transaction_error: tx_by_addr::TransactionError =
-            transaction_error.clone().into();
-        assert_eq!(
-            transaction_error,
-            tx_by_addr_transaction_error.try_into().unwrap()
-        );
-
-        let transaction_error = TransactionError::InsufficientFundsForRent { account_index: 0 };
         let tx_by_addr_transaction_error: tx_by_addr::TransactionError =
             transaction_error.clone().into();
         assert_eq!(
@@ -1689,6 +1675,22 @@ mod test {
             transaction_error,
             tx_by_addr_transaction_error.try_into().unwrap()
         );
+
+        let transaction_error = TransactionError::DuplicateInstruction(10);
+        let tx_by_addr_transaction_error: tx_by_addr::TransactionError =
+            transaction_error.clone().into();
+        assert_eq!(
+            transaction_error,
+            tx_by_addr_transaction_error.try_into().unwrap()
+        );
+
+        let transaction_error = TransactionError::InsufficientFundsForRent { account_index: 10 };
+        let tx_by_addr_transaction_error: tx_by_addr::TransactionError =
+            transaction_error.clone().into();
+        assert_eq!(
+            transaction_error,
+            tx_by_addr_transaction_error.try_into().unwrap()
+        );
     }
 
     #[test]
@@ -1696,51 +1698,68 @@ mod test {
         let ix_index = 1;
         let custom_error = 42;
         for error in tx_by_addr::TransactionErrorType::into_enum_iter() {
-            if error == tx_by_addr::TransactionErrorType::DuplicateInstruction
-                || error == tx_by_addr::TransactionErrorType::InsufficientFundsForRent
-            {
-                continue;
-            } else if error != tx_by_addr::TransactionErrorType::InstructionError {
-                let tx_by_addr_error = tx_by_addr::TransactionError {
-                    transaction_error: error as i32,
-                    instruction_error: None,
-                };
-                let transaction_error: TransactionError = tx_by_addr_error
-                    .clone()
-                    .try_into()
-                    .unwrap_or_else(|_| panic!("{:?} conversion implemented?", error));
-                assert_eq!(tx_by_addr_error, transaction_error.into());
-            } else {
-                for ix_error in tx_by_addr::InstructionErrorType::into_enum_iter() {
-                    if ix_error != tx_by_addr::InstructionErrorType::Custom {
-                        let tx_by_addr_error = tx_by_addr::TransactionError {
-                            transaction_error: error as i32,
-                            instruction_error: Some(tx_by_addr::InstructionError {
-                                index: ix_index,
-                                error: ix_error as i32,
-                                custom: None,
-                            }),
-                        };
-                        let transaction_error: TransactionError = tx_by_addr_error
-                            .clone()
-                            .try_into()
-                            .unwrap_or_else(|_| panic!("{:?} conversion implemented?", ix_error));
-                        assert_eq!(tx_by_addr_error, transaction_error.into());
-                    } else {
-                        let tx_by_addr_error = tx_by_addr::TransactionError {
-                            transaction_error: error as i32,
-                            instruction_error: Some(tx_by_addr::InstructionError {
-                                index: ix_index,
-                                error: ix_error as i32,
-                                custom: Some(tx_by_addr::CustomError {
-                                    custom: custom_error,
+            match error {
+                tx_by_addr::TransactionErrorType::DuplicateInstruction
+                | tx_by_addr::TransactionErrorType::InsufficientFundsForRent => {
+                    let tx_by_addr_error = tx_by_addr::TransactionError {
+                        transaction_error: error as i32,
+                        instruction_error: None,
+                        transaction_details: Some(tx_by_addr::TransactionDetails {
+                            index: ix_index,
+                        }),
+                    };
+                    let transaction_error: TransactionError = tx_by_addr_error
+                        .clone()
+                        .try_into()
+                        .unwrap_or_else(|_| panic!("{:?} conversion implemented?", error));
+                    assert_eq!(tx_by_addr_error, transaction_error.into());
+                }
+                tx_by_addr::TransactionErrorType::InstructionError => {
+                    for ix_error in tx_by_addr::InstructionErrorType::into_enum_iter() {
+                        if ix_error != tx_by_addr::InstructionErrorType::Custom {
+                            let tx_by_addr_error = tx_by_addr::TransactionError {
+                                transaction_error: error as i32,
+                                instruction_error: Some(tx_by_addr::InstructionError {
+                                    index: ix_index,
+                                    error: ix_error as i32,
+                                    custom: None,
                                 }),
-                            }),
-                        };
-                        let transaction_error: TransactionError =
-                            tx_by_addr_error.clone().try_into().unwrap();
-                        assert_eq!(tx_by_addr_error, transaction_error.into());
+                                transaction_details: None,
+                            };
+                            let transaction_error: TransactionError =
+                                tx_by_addr_error.clone().try_into().unwrap_or_else(|_| {
+                                    panic!("{:?} conversion implemented?", ix_error)
+                                });
+                            assert_eq!(tx_by_addr_error, transaction_error.into());
+                        } else {
+                            let tx_by_addr_error = tx_by_addr::TransactionError {
+                                transaction_error: error as i32,
+                                instruction_error: Some(tx_by_addr::InstructionError {
+                                    index: ix_index,
+                                    error: ix_error as i32,
+                                    custom: Some(tx_by_addr::CustomError {
+                                        custom: custom_error,
+                                    }),
+                                }),
+                                transaction_details: None,
+                            };
+                            let transaction_error: TransactionError =
+                                tx_by_addr_error.clone().try_into().unwrap();
+                            assert_eq!(tx_by_addr_error, transaction_error.into());
+                        }
                     }
+                }
+                _ => {
+                    let tx_by_addr_error = tx_by_addr::TransactionError {
+                        transaction_error: error as i32,
+                        instruction_error: None,
+                        transaction_details: None,
+                    };
+                    let transaction_error: TransactionError = tx_by_addr_error
+                        .clone()
+                        .try_into()
+                        .unwrap_or_else(|_| panic!("{:?} conversion implemented?", error));
+                    assert_eq!(tx_by_addr_error, transaction_error.into());
                 }
             }
         }
