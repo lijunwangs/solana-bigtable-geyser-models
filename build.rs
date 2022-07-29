@@ -16,7 +16,6 @@ fn main() -> Result<(), std::io::Error> {
     tonic_build::configure()
         .build_client(true)
         .build_server(false)
-        .format(true)
         .type_attribute(
             "TransactionErrorType",
             "#[cfg_attr(test, derive(enum_iterator::IntoEnumIterator))]",
