@@ -14,6 +14,13 @@ message account {
     UnixTimestamp updated_on = 9;
 }
 
+// Container for a series of account states.
+// Useful to keep historical track record of account updates as single object
+// or for other batching schemas.
+message accounts_batch {
+    repeated account accounts = 1;
+}
+
 message UnixTimestamp {
     int64 timestamp = 1;
 }
